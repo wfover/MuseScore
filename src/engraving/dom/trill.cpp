@@ -256,7 +256,7 @@ LineSegment* Trill::createLineSegment(System* parent)
 {
     TrillSegment* seg = new TrillSegment(this, parent);
     seg->setTrack(track());
-    seg->setColor(color());
+    seg->setColor(lineColor());
     seg->initElementStyle(&trillSegmentStyle);
     return seg;
 }
@@ -350,6 +350,6 @@ String Trill::accessibleInfo() const
 
 void Trill::doComputeEndElement()
 {
-    setEndElement(score()->findCRinStaff(tick2(), track2staff(track2())));
+    setEndElement(score()->findChordRestEndingBeforeTickInStaff(tick2(), track2staff(track2())));
 }
 }

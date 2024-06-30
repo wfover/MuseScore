@@ -54,12 +54,14 @@ public:
 
     static double computePadding(const EngravingItem* item1, const EngravingItem* item2);
     static KerningType computeKerning(const EngravingItem* item1, const EngravingItem* item2);
+    static double computeVerticalClearance(const EngravingItem* item1, const EngravingItem* item2, double spatium);
 
 private:
     static bool isSpecialNotePaddingType(ElementType type);
     static void computeNotePadding(const Note* note, const EngravingItem* item2, double& padding, double scaling);
     static void computeLedgerRestPadding(const Rest* rest2, double& padding);
-    static void computeLyricsPadding(const Lyrics* lyrics1, const Lyrics* lyrics2, double& padding);
+    static bool isSpecialLyricsPaddingType(ElementType type);
+    static void computeLyricsPadding(const Lyrics* lyrics1, const EngravingItem* item2, double& padding);
 
     static bool isSameVoiceKerningLimited(const EngravingItem* item);
     static bool isNeverKernable(const EngravingItem* item);

@@ -166,7 +166,7 @@ public:
     LineStyleSelect(QObject* parent, QComboBox* lineStyleComboBox, const QList<QWidget*>& dashSpecificWidgets)
         : QObject(parent), lineStyleComboBox(lineStyleComboBox), dashSpecificWidgets(dashSpecificWidgets)
     {
-        connect(lineStyleComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &LineStyleSelect::update);
+        connect(lineStyleComboBox, &QComboBox::currentIndexChanged, this, &LineStyleSelect::update);
     }
 
     void update() const
@@ -199,12 +199,20 @@ static void fillDirectionComboBox(QComboBox* comboBox)
     comboBox->addItem(TConv::translatedUserName(DirectionV::DOWN), static_cast<int>(DirectionV::DOWN));
 }
 
+static void fillDynamicHairpinComboBox(QComboBox* comboBox)
+{
+    comboBox->clear();
+    comboBox->addItem(muse::qtrc("notation/editstyle", "Based on voice"), int(DirectionV::AUTO));
+    comboBox->addItem(muse::qtrc("notation/editstyle", "Above"), int(DirectionV::UP));
+    comboBox->addItem(muse::qtrc("notation/editstyle", "Below"), int(DirectionV::DOWN));
+}
+
 //---------------------------------------------------------
 //   EditStyle
 //---------------------------------------------------------
 
 EditStyle::EditStyle(QWidget* parent)
-    : QDialog(parent)
+    : QDialog(parent), muse::Injectable(muse::iocCtxForQWidget(this))
 {
     //! NOTE: suppress all accessibility events causing a long delay when opening the dialog (massive spam from setupUi)
     accessibilityController()->setIgnoreQtAccessibilityEvents(true);
@@ -291,6 +299,16 @@ EditStyle::EditStyle(QWidget* parent)
     keysigVisibility->addButton(radioShowAllKeys, true);
     keysigVisibility->addButton(radioHideKeys, false);
 
+    QButtonGroup* firstSysLabels = new QButtonGroup(this);
+    firstSysLabels->addButton(firstLongBtn, int(InstrumentLabelVisibility::LONG));
+    firstSysLabels->addButton(firstShortBtn, int(InstrumentLabelVisibility::SHORT));
+    firstSysLabels->addButton(firstHideBtn, int(InstrumentLabelVisibility::HIDE));
+
+    QButtonGroup* subsSysLabels = new QButtonGroup(this);
+    subsSysLabels->addButton(subsLongBtn, int(InstrumentLabelVisibility::LONG));
+    subsSysLabels->addButton(subsShortBtn, int(InstrumentLabelVisibility::SHORT));
+    subsSysLabels->addButton(subsHideBtn, int(InstrumentLabelVisibility::HIDE));
+
     // ====================================================
     // Style widgets
     // ====================================================
@@ -332,8 +350,8 @@ EditStyle::EditStyle(QWidget* parent)
         { StyleId::maxPageFillSpread,       false, maxPageFillSpread,       resetMaxPageFillSpread },
 
         { StyleId::lyricsPlacement,         false, lyricsPlacement,         resetLyricsPlacement },
-        { StyleId::lyricsPosAbove,          false, lyricsPosAbove,          resetLyricsPosAbove },
-        { StyleId::lyricsPosBelow,          false, lyricsPosBelow,          resetLyricsPosBelow },
+        { StyleId::lyricsPosAbove,          false, yLyricsPosAbove,         resetLyricsPosAbove },
+        { StyleId::lyricsPosBelow,          false, yLyricsPosBelow,         resetLyricsPosBelow },
         { StyleId::lyricsMinTopDistance,    false, lyricsMinTopDistance,    resetLyricsMinTopDistance },
         { StyleId::lyricsMinBottomDistance, false, lyricsMinBottomDistance, resetLyricsMinBottomDistance },
         { StyleId::lyricsMinDistance,       false, lyricsMinDistance,       resetLyricsMinDistance },
@@ -345,10 +363,14 @@ EditStyle::EditStyle(QWidget* parent)
         { StyleId::lyricsAlignVerseNumber,  false, lyricsAlignVerseNumber,  resetLyricsAlignVerseNumber },
         { StyleId::lyricsLineThickness,     false, lyricsLineThickness,     resetLyricsLineThickness },
         { StyleId::lyricsMelismaPad,        false, lyricsMelismaPad,        resetLyricsMelismaPad },
-        { StyleId::lyricsMelismaAlign,      false, lyricsMelismaAlign,      resetLyricsMelismaAlign },
         { StyleId::lyricsDashPad,           false, lyricsDashPad,           resetLyricsDashPad },
         { StyleId::lyricsDashLineThickness, false, lyricsDashLineThickness, resetLyricsDashLineThickness },
         { StyleId::lyricsDashYposRatio,     false, lyricsDashYposRatio,     resetLyricsDashYposRatio },
+        { StyleId::lyricsShowDashIfSyllableOnFirstNote, false, lyricsShowDashIfSyllableOnFirstNote,
+          resetLyricsShowDashIfSyllableOnFirstNote },
+        { StyleId::lyricsMelismaMinLength,  false, minMelismaLength,     resetMinMelismaLength },
+        { StyleId::lyricsMelismaForce,      false, lyricsMelismaForce,   resetLyricsMelismaForce },
+        { StyleId::lyricsDashPosAtStartOfSystem, false, lyricsDashStartSystemPlacement, resetLyricsDashStartSystemPlacement },
 
         { StyleId::systemFrameDistance,     false, systemFrameDistance,     resetSystemFrameDistance },
         { StyleId::frameSystemDistance,     false, frameSystemDistance,     resetFrameSystemDistance },
@@ -403,11 +425,11 @@ EditStyle::EditStyle(QWidget* parent)
         { StyleId::firstSystemIndentationValue, false, indentationValue, resetFirstSystemIndentation },
         { StyleId::alwaysShowBracketsWhenEmptyStavesAreHidden, false, alwaysShowBrackets, 0 },
         { StyleId::hideInstrumentNameIfOneInstrument, false, hideInstrumentNameIfOneInstrument, 0 },
+        { StyleId::firstSystemInstNameVisibility, false, firstSysLabels, resetFirstSystemLabel },
+        { StyleId::subsSystemInstNameVisibility, false, subsSysLabels, resetSubsSystemLabel },
         { StyleId::accidentalNoteDistance,  false, accidentalNoteDistance,  0 },
         { StyleId::accidentalDistance,      false, accidentalDistance,      0 },
         { StyleId::bracketedAccidentalPadding, false, accidentalsBracketsBadding, resetAccidentalsBracketPadding },
-        { StyleId::alignAccidentalsLeft,    false, accidentalsOctaveColumnsAlignLeft, resetAccidentalsOctaveColumnsAlignLeft },
-
         { StyleId::minNoteDistance,         false, minNoteDistance,         resetMinNoteDistance },
         { StyleId::barNoteDistance,         false, barNoteDistance,         resetBarNoteDistance },
         { StyleId::barAccidentalDistance,   false, barAccidentalDistance,   resetBarAccidentalDistance },
@@ -427,7 +449,6 @@ EditStyle::EditStyle(QWidget* parent)
         { StyleId::timesigBarlineDistance,  false, timesigBarlineDistance,  resetTimesigBarlineDistance },
         { StyleId::staffLineWidth,          false, staffLineWidth,          resetStaffLineWidth },
 
-        { StyleId::hairpinPlacement,        false, hairpinPlacement,        resetHairpinPlacement },
         { StyleId::hairpinPosAbove,         false, hairpinPosAbove,         resetHairpinPosAbove },
         { StyleId::hairpinPosBelow,         false, hairpinPosBelow,         resetHairpinPosBelow },
         { StyleId::hairpinLineWidth,        false, hairpinLineWidth,        resetHairpinLineWidth },
@@ -440,6 +461,7 @@ EditStyle::EditStyle(QWidget* parent)
         { StyleId::ledgerLineWidth,         false, ledgerLineWidth,         0 },
         { StyleId::ledgerLineLength,        false, ledgerLineLength,        0 },
         { StyleId::shortestStem,            false, shortestStem,            0 },
+        { StyleId::combineVoice,            false, combineVoices,           resetCombineVoices },
         { StyleId::ArpeggioNoteDistance,    false, arpeggioNoteDistance,    0 },
         { StyleId::ArpeggioLineWidth,       false, arpeggioLineWidth,       0 },
         { StyleId::ArpeggioHookLen,         false, arpeggioHookLen,         0 },
@@ -596,7 +618,6 @@ EditStyle::EditStyle(QWidget* parent)
         { StyleId::autoplaceHairpinDynamicsDistance, false, autoplaceHairpinDynamicsDistance,
           resetAutoplaceHairpinDynamicsDistance },
 
-        { StyleId::dynamicsPlacement,       false, dynamicsPlacement,          resetDynamicsPlacement },
         { StyleId::dynamicsPosAbove,        false, dynamicsPosAbove,           resetDynamicsPosAbove },
         { StyleId::dynamicsPosBelow,        false, dynamicsPosBelow,           resetDynamicsPosBelow },
         { StyleId::dynamicsMinDistance,     false, dynamicsMinDistance,        resetDynamicsMinDistance },
@@ -605,6 +626,10 @@ EditStyle::EditStyle(QWidget* parent)
         { StyleId::dynamicsSize,            true,  dynamicsSize,               resetDynamicsSize },
         { StyleId::dynamicsOverrideFont,    false, dynamicsOverrideFont,       0 },
         { StyleId::dynamicsFont,            false, dynamicsFont,               0 },
+
+        { StyleId::dynamicsHairpinVoiceBasedPlacement, false, dynamicsAndHairpinPos, resetDynamicsAndHairpinPos },
+        { StyleId::dynamicsHairpinsAutoCenterOnGrandStaff, false, dynamicsAndHairpinsCenterOnGrandStaff, 0 },
+        { StyleId::dynamicsHairpinsAboveForVocalStaves, false, dynamicsAndHairpinsAboveOnVocalStaves, 0 },
 
         { StyleId::tempoPlacement,          false, tempoTextPlacement,          resetTempoTextPlacement },
         { StyleId::tempoPosAbove,           false, tempoTextPosAbove,           resetTempoTextPosAbove },
@@ -724,11 +749,9 @@ EditStyle::EditStyle(QWidget* parent)
         lyricsPlacement,
         textLinePlacement,
         systemTextLinePlacement,
-        hairpinPlacement,
         pedalLinePlacement,
         trillLinePlacement,
         vibratoLinePlacement,
-        dynamicsPlacement,
         tempoTextPlacement,
         staffTextPlacement,
         rehearsalMarkPlacement,
@@ -773,6 +796,13 @@ EditStyle::EditStyle(QWidget* parent)
     tupletBracketType->addItem(muse::qtrc("notation/editstyle", "Automatic"), int(TupletBracketType::AUTO_BRACKET));
     tupletBracketType->addItem(muse::qtrc("notation/editstyle", "Bracket"), int(TupletBracketType::SHOW_BRACKET));
     tupletBracketType->addItem(muse::qtrc("notation/editstyle", "None", "no tuplet bracket type"), int(TupletBracketType::SHOW_NO_BRACKET));
+
+    lyricsDashStartSystemPlacement->clear();
+    lyricsDashStartSystemPlacement->addItem(muse::qtrc("notation/editstyle", "Standard"), int(LyricsDashSystemStart::STANDARD));
+    lyricsDashStartSystemPlacement->addItem(muse::qtrc("notation/editstyle", "Inside the header"),
+                                            int(LyricsDashSystemStart::UNDER_HEADER));
+    lyricsDashStartSystemPlacement->addItem(muse::qtrc("notation/editstyle", "Under the first note"),
+                                            int(LyricsDashSystemStart::UNDER_FIRST_NOTE));
 
     musicalSymbolFont->clear();
     dynamicsFont->clear();
@@ -864,6 +894,19 @@ EditStyle::EditStyle(QWidget* parent)
     groupBox_ties->layout()->addWidget(tiePlacementSelector);
 
     // ====================================================
+    // ACCIDENTAL GROUP PLACEMENT (QML)
+    // ====================================================
+
+    QQuickWidget* accidPlacementSelector = new QQuickWidget(/*QmlEngine*/ uiEngine()->qmlEngine(),
+                                                            /*parent*/ groupBoxAccidentalStacking);
+    accidPlacementSelector->setObjectName("accidPlacementSelector_QQuickWidget");
+    accidPlacementSelector->setSource(QUrl(QString::fromUtf8(
+                                               "qrc:/qml/MuseScore/NotationScene/internal/EditStyle/AccidentalGroupPage.qml")));
+    accidPlacementSelector->setMinimumSize(224, 440);
+    accidPlacementSelector->setResizeMode(QQuickWidget::SizeRootObjectToView);
+    groupBoxAccidentalStacking->layout()->addWidget(accidPlacementSelector);
+
+    // ====================================================
     // Figured Bass
     // ====================================================
 
@@ -872,7 +915,7 @@ EditStyle::EditStyle(QWidget* parent)
         comboFBFont->addItem(family);
     }
     comboFBFont->setCurrentIndex(0);
-    connect(comboFBFont, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &EditStyle::on_comboFBFont_currentIndexChanged);
+    connect(comboFBFont, &QComboBox::currentIndexChanged, this, &EditStyle::on_comboFBFont_currentIndexChanged);
 
     // ====================================================
     // Chord Symbols
@@ -924,15 +967,13 @@ EditStyle::EditStyle(QWidget* parent)
     connect(swingSixteenth, &QRadioButton::toggled, this, &EditStyle::setSwingParams);
 
     connect(concertPitch,        &QCheckBox::toggled, this, &EditStyle::concertPitchToggled);
-    connect(lyricsDashMinLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &EditStyle::lyricsDashMinLengthValueChanged);
-    connect(lyricsDashMaxLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &EditStyle::lyricsDashMaxLengthValueChanged);
-    connect(minSystemDistance,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &EditStyle::systemMinDistanceValueChanged);
-    connect(maxSystemDistance,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &EditStyle::systemMaxDistanceValueChanged);
+    connect(lyricsDashMinLength, &QDoubleSpinBox::valueChanged, this, &EditStyle::lyricsDashMinLengthValueChanged);
+    connect(lyricsDashMaxLength, &QDoubleSpinBox::valueChanged, this, &EditStyle::lyricsDashMaxLengthValueChanged);
+    connect(minSystemDistance,   &QDoubleSpinBox::valueChanged, this, &EditStyle::systemMinDistanceValueChanged);
+    connect(maxSystemDistance,   &QDoubleSpinBox::valueChanged, this, &EditStyle::systemMaxDistanceValueChanged);
 
     connect(radioShowAllClefs, &QRadioButton::toggled, this, &EditStyle::clefVisibilityChanged);
     connect(radioHideClefs,    &QRadioButton::toggled, this, &EditStyle::clefVisibilityChanged);
-
-    connect(tupletUseSymbols,  &QCheckBox::toggled,    this, &EditStyle::tupletUseSymbolsChanged);
 
     accidentalsGroup->setVisible(false);   // disable, not yet implemented
 
@@ -950,7 +991,11 @@ EditStyle::EditStyle(QWidget* parent)
 
         if (P_TYPE::DIRECTION_V == type) {
             QComboBox* cb = qobject_cast<QComboBox*>(sw.widget);
-            fillDirectionComboBox(cb);
+            if (sw.idx == StyleId::dynamicsHairpinVoiceBasedPlacement) {
+                fillDynamicHairpinComboBox(cb);
+            } else {
+                fillDirectionComboBox(cb);
+            }
         }
 
         if (sw.reset) {
@@ -960,13 +1005,13 @@ EditStyle::EditStyle(QWidget* parent)
         }
 
         if (auto spinBox = qobject_cast<QSpinBox*>(sw.widget)) {
-            connect(spinBox, QOverload<int>::of(&QSpinBox::valueChanged), setSignalMapper, mapFunction);
+            connect(spinBox, &QSpinBox::valueChanged, setSignalMapper, mapFunction);
         } else if (auto doubleSpinBox = qobject_cast<QDoubleSpinBox*>(sw.widget)) {
-            connect(doubleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), setSignalMapper, mapFunction);
+            connect(doubleSpinBox, &QDoubleSpinBox::valueChanged, setSignalMapper, mapFunction);
         } else if (auto fontComboBox = qobject_cast<QFontComboBox*>(sw.widget)) {
             connect(fontComboBox, &QFontComboBox::currentFontChanged, setSignalMapper, mapFunction);
         } else if (auto comboBox = qobject_cast<QComboBox*>(sw.widget)) {
-            connect(comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), setSignalMapper, mapFunction);
+            connect(comboBox, &QComboBox::currentIndexChanged, setSignalMapper, mapFunction);
         } else if (auto radioButton = qobject_cast<QRadioButton*>(sw.widget)) {
             connect(radioButton, &QRadioButton::toggled, setSignalMapper, mapFunction);
         } else if (auto checkBox = qobject_cast<QCheckBox*>(sw.widget)) {
@@ -978,7 +1023,7 @@ EditStyle::EditStyle(QWidget* parent)
         } else if (auto textEdit = qobject_cast<QTextEdit*>(sw.widget)) {
             connect(textEdit, &QTextEdit::textChanged, setSignalMapper, mapFunction);
         } else if (auto buttonGroup = qobject_cast<QButtonGroup*>(sw.widget)) {
-            connect(buttonGroup, QOverload<QAbstractButton*>::of(&QButtonGroup::buttonClicked), setSignalMapper, mapFunction);
+            connect(buttonGroup, &QButtonGroup::buttonClicked, setSignalMapper, mapFunction);
         } else if (auto alignSelect = qobject_cast<AlignSelect*>(sw.widget)) {
             connect(alignSelect, &AlignSelect::alignChanged, setSignalMapper, mapFunction);
         } else if (auto offsetSelect = qobject_cast<OffsetSelect*>(sw.widget)) {
@@ -1007,7 +1052,15 @@ EditStyle::EditStyle(QWidget* parent)
     textStyleFrameType->addItem(muse::qtrc("notation/editstyle", "Rectangle"), int(FrameType::SQUARE));
     textStyleFrameType->addItem(muse::qtrc("notation/editstyle", "Circle"), int(FrameType::CIRCLE));
 
+    connect(dynamicsAndHairpinPos, &QComboBox::currentIndexChanged, dynamicsAndHairpinPosDescription, [=]() {
+        dynamicsAndHairpinPosDescription->setVisible(dynamicsAndHairpinPos->currentIndex() == int(DirectionV::AUTO));
+    });
+    connect(dynamicsAndHairpinPos, &QComboBox::currentIndexChanged, dynamicsAndHairpinsAboveOnVocalStaves, [=]() {
+        dynamicsAndHairpinsAboveOnVocalStaves->setEnabled(dynamicsAndHairpinPos->currentIndex() != int(DirectionV::UP));
+    });
+
     WidgetUtils::setWidgetIcon(resetTextStyleName, IconCode::Code::UNDO);
+
     connect(resetTextStyleName, &QToolButton::clicked, this, &EditStyle::resetUserStyleName);
     connect(styleName, &QLineEdit::textEdited, this, &EditStyle::editUserStyleName);
     connect(styleName, &QLineEdit::editingFinished, this, &EditStyle::endEditUserStyleName);
@@ -1026,7 +1079,7 @@ EditStyle::EditStyle(QWidget* parent)
     connect(resetTextStyleFontSize, &QToolButton::clicked, [=]() {
         resetTextStyle(TextStylePropertyType::FontSize);
     });
-    connect(textStyleFontSize, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [=]() {
+    connect(textStyleFontSize, &QDoubleSpinBox::valueChanged, [=]() {
         textStyleValueChanged(TextStylePropertyType::FontSize, QVariant(textStyleFontSize->value()));
     });
 
@@ -1035,7 +1088,7 @@ EditStyle::EditStyle(QWidget* parent)
     connect(resetTextStyleMusicalSymbolsScale, &QToolButton::clicked, [=]() {
         resetTextStyle(TextStylePropertyType::MusicalSymbolsScale);
     });
-    connect(textStyleMusicalSymbolsScale, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [=]() {
+    connect(textStyleMusicalSymbolsScale, &QDoubleSpinBox::valueChanged, [=]() {
         textStyleValueChanged(TextStylePropertyType::MusicalSymbolsScale, QVariant(textStyleMusicalSymbolsScale->value()));
     });
 
@@ -1044,7 +1097,7 @@ EditStyle::EditStyle(QWidget* parent)
     connect(resetTextStyleLineSpacing, &QToolButton::clicked, [=]() {
         resetTextStyle(TextStylePropertyType::LineSpacing);
     });
-    connect(textStyleLineSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [=]() {
+    connect(textStyleLineSpacing, &QDoubleSpinBox::valueChanged, [=]() {
         textStyleValueChanged(TextStylePropertyType::LineSpacing, QVariant(textStyleLineSpacing->value()));
     });
 
@@ -1088,7 +1141,7 @@ EditStyle::EditStyle(QWidget* parent)
     connect(resetTextStyleFrameType, &QToolButton::clicked, [=]() {
         resetTextStyle(TextStylePropertyType::FrameType);
     });
-    connect(textStyleFrameType, QOverload<int>::of(&QComboBox::currentIndexChanged), [=]() {
+    connect(textStyleFrameType, &QComboBox::currentIndexChanged, [=]() {
         textStyleValueChanged(TextStylePropertyType::FrameType, textStyleFrameType->currentIndex());
     });
 
@@ -1096,7 +1149,7 @@ EditStyle::EditStyle(QWidget* parent)
     connect(resetTextStyleFramePadding, &QToolButton::clicked, [=]() {
         resetTextStyle(TextStylePropertyType::FramePadding);
     });
-    connect(textStyleFramePadding, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [=]() {
+    connect(textStyleFramePadding, &QDoubleSpinBox::valueChanged, [=]() {
         textStyleValueChanged(TextStylePropertyType::FramePadding, textStyleFramePadding->value());
     });
 
@@ -1104,7 +1157,7 @@ EditStyle::EditStyle(QWidget* parent)
     connect(resetTextStyleFrameBorder, &QToolButton::clicked, [=]() {
         resetTextStyle(TextStylePropertyType::FrameWidth);
     });
-    connect(textStyleFrameBorder, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [=]() {
+    connect(textStyleFrameBorder, &QDoubleSpinBox::valueChanged, [=]() {
         textStyleValueChanged(TextStylePropertyType::FrameWidth, textStyleFrameBorder->value());
     });
 
@@ -1112,7 +1165,7 @@ EditStyle::EditStyle(QWidget* parent)
     connect(resetTextStyleFrameBorderRadius, &QToolButton::clicked, [=]() {
         resetTextStyle(TextStylePropertyType::FrameRound);
     });
-    connect(textStyleFrameBorderRadius, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [=]() {
+    connect(textStyleFrameBorderRadius, &QDoubleSpinBox::valueChanged, [=]() {
         textStyleValueChanged(TextStylePropertyType::FrameRound, textStyleFrameBorderRadius->value());
     });
 
@@ -1147,18 +1200,18 @@ EditStyle::EditStyle(QWidget* parent)
     connect(pageList, &QListWidget::currentRowChanged, this, &EditStyle::on_pageRowSelectionChanged);
     pageList->setCurrentRow(configuration()->styleDialogLastPageIndex());
 
+    editLyricsTextStyleButton->setChecked(false);
+    connect(editLyricsTextStyleButton, &QPushButton::clicked, pageList, [=](){
+        pageList->setCurrentRow(ALL_PAGE_CODES.indexOf("text-styles"));
+    });
+    connect(editLyricsTextStyleButton, &QPushButton::clicked, textStyles, [=](){
+        textStyles->setCurrentRow(ALL_TEXT_STYLE_SUBPAGE_CODES.indexOf("lyrics-odd-lines"));
+    });
+
     adjustPagesStackSize(0);
 
     WidgetStateStore::restoreGeometry(this);
 }
-
-#ifdef MU_QT5_COMPAT
-EditStyle::EditStyle(const EditStyle& other)
-    : QDialog(other.parentWidget())
-{
-}
-
-#endif
 
 //---------------------------------------------------------
 //   showEvent
@@ -1879,18 +1932,6 @@ void EditStyle::on_resetStylesButton_clicked()
 }
 
 //---------------------------------------------------------
-//    On resetTabStylesButton clicked
-//---------------------------------------------------------
-
-void EditStyle::on_resetTabStylesButton_clicked()
-{
-    // TODO: now button is hidden, make sure default styles are chosen correctly
-    for (int i = static_cast<int>(StyleId::slurShowTabSimple); i <= static_cast<int>(StyleId::golpeShowTabCommon); i++) {
-        resetStyleValue(i);
-    }
-}
-
-//---------------------------------------------------------
 //    On pageRowSelectionChanged
 //---------------------------------------------------------
 
@@ -1944,6 +1985,9 @@ PropertyValue EditStyle::getValue(StyleId idx)
         } else if (sw.idx == StyleId::articulationKeepTogether || sw.idx == StyleId::genClef || sw.idx == StyleId::genKeysig) { // special case for bool represented by a two-item buttonGroup
             QButtonGroup* bg = qobject_cast<QButtonGroup*>(sw.widget);
             v = bool(bg->checkedId());
+        } else if (sw.idx == StyleId::lyricsDashForce || sw.idx == StyleId::lyricsMelismaForce) { // special case where UI is presented with opposite wording
+            v = sw.widget->property("checked");
+            return !v.toBool();
         } else {
             v = sw.widget->property("checked");
             if (!v.isValid()) {
@@ -1985,6 +2029,10 @@ PropertyValue EditStyle::getValue(StyleId idx)
         }
     } break;
     case P_TYPE::POINT: {
+        if (idx == StyleId::lyricsPosAbove || idx == StyleId::lyricsPosBelow) {
+            QDoubleSpinBox* dsb = qobject_cast<QDoubleSpinBox*>(sw.widget);
+            return PointF(0.0, dsb->value());
+        }
         OffsetSelect* cb = qobject_cast<OffsetSelect*>(sw.widget);
         if (cb) {
             return PointF::fromQPointF(cb->offset());
@@ -2026,7 +2074,9 @@ void EditStyle::setValues()
         if (sw.widget) {
             sw.widget->blockSignals(true);
         }
-        PropertyValue val = styleValue(sw.idx);
+        PropertyValue val = sw.idx == StyleId::lyricsPosAbove || sw.idx == StyleId::lyricsPosBelow
+                            ? Spatium(styleValue(sw.idx).value<PointF>().y())
+                            : styleValue(sw.idx);
         if (sw.reset) {
             sw.reset->setEnabled(!hasDefaultStyleValue(sw.idx));
         }
@@ -2056,6 +2106,8 @@ void EditStyle::setValues()
             } else if (sw.idx == StyleId::articulationKeepTogether || sw.idx == StyleId::genClef || sw.idx == StyleId::genKeysig) { // special case for bool represented by a two-item buttonGroup
                 qobject_cast<QButtonGroup*>(sw.widget)->button(1)->setChecked(value);
                 qobject_cast<QButtonGroup*>(sw.widget)->button(0)->setChecked(!value);
+            } else if (sw.idx == StyleId::lyricsDashForce || sw.idx == StyleId::lyricsMelismaForce) { // special case where UI is presented with opposite wording
+                sw.widget->setProperty("checked", !value);
             } else {
                 if (!sw.widget->setProperty("checked", value)) {
                     unhandledType(sw);
@@ -2141,6 +2193,9 @@ void EditStyle::setValues()
     }
 
     textStyleChanged(textStyles->currentRow());
+
+    dynamicsAndHairpinPos->currentIndexChanged(dynamicsAndHairpinPos->currentIndex());
+    resetDynamicsAndHairpinPos->setEnabled(!dynamicsAndHairpinPosPropertiesHaveDefaultStyleValue());
 
     //TODO: convert the rest:
 
@@ -2286,6 +2341,13 @@ PropertyValue EditStyle::defaultStyleValue(StyleId id) const
 bool EditStyle::hasDefaultStyleValue(StyleId id) const
 {
     return defaultStyleValue(id) == styleValue(id);
+}
+
+bool EditStyle::dynamicsAndHairpinPosPropertiesHaveDefaultStyleValue() const
+{
+    return hasDefaultStyleValue(StyleId::dynamicsHairpinsAutoCenterOnGrandStaff)
+           && hasDefaultStyleValue(StyleId::dynamicsHairpinsAboveForVocalStaves)
+           && hasDefaultStyleValue(StyleId::dynamicsHairpinVoiceBasedPlacement);
 }
 
 void EditStyle::setStyleQVariantValue(StyleId id, const QVariant& value)
@@ -2516,6 +2578,11 @@ void EditStyle::valueChanged(int i)
     if (sw.reset) {
         sw.reset->setEnabled(!hasDefaultStyleValue(idx));
     }
+
+    if (idx == StyleId::dynamicsHairpinVoiceBasedPlacement || idx == StyleId::dynamicsHairpinsAutoCenterOnGrandStaff
+        || idx == StyleId::dynamicsHairpinsAboveForVocalStaves) {
+        resetDynamicsAndHairpinPos->setEnabled(!dynamicsAndHairpinPosPropertiesHaveDefaultStyleValue());
+    }
 }
 
 //---------------------------------------------------------
@@ -2527,6 +2594,11 @@ void EditStyle::resetStyleValue(int i)
     StyleId idx = (StyleId)i;
 
     setStyleValue(idx, defaultStyleValue(idx));
+    if (idx == StyleId::dynamicsHairpinVoiceBasedPlacement) {
+        for (StyleId id : { StyleId::dynamicsHairpinsAutoCenterOnGrandStaff, StyleId::dynamicsHairpinsAboveForVocalStaves }) {
+            setStyleValue(id, defaultStyleValue(id));
+        }
+    }
     setValues();
 }
 
@@ -2561,7 +2633,6 @@ void EditStyle::textStyleChanged(int row)
         case TextStylePropertyType::MusicalSymbolsScale:
             textStyleMusicalSymbolsScale->setValue(styleValue(a.sid).toDouble() * 100);
             resetTextStyleMusicalSymbolsScale->setEnabled(styleValue(a.sid) != defaultStyleValue(a.sid));
-            row_textStyleMusicalSymbolsScale->setVisible(a.sid != Sid::dummyMusicalSymbolsScale);
             break;
 
         case TextStylePropertyType::FontStyle:
@@ -2636,7 +2707,6 @@ void EditStyle::textStyleChanged(int row)
 
     tupletUseSymbols->setVisible(tid == TextStyleType::TUPLET);
     resetTupletUseSymbols->setVisible(tid == TextStyleType::TUPLET);
-    row_textStyleMusicalSymbolsScale->setEnabled(tid != TextStyleType::TUPLET || tupletUseSymbols->isChecked());
 
     configuration()->setStyleDialogLastSubPageIndex(row);
 }
@@ -2731,7 +2801,7 @@ void EditStyle::resetUserStyleName()
 
 void EditStyle::updateParenthesisIndicatingTiesGroupState()
 {
-    groupBox_2->setEnabled(tabShowTies->isChecked() || tabShowNone->isChecked());
+    tieParen->setEnabled(tabShowTies->isChecked() || tabShowNone->isChecked());
 }
 
 void EditStyle::clefVisibilityChanged(bool checked)
@@ -2745,9 +2815,4 @@ void EditStyle::clefVisibilityChanged(bool checked)
     } else {
         hideTabClefs->setEnabled(true);
     }
-}
-
-void EditStyle::tupletUseSymbolsChanged(bool checked)
-{
-    row_textStyleMusicalSymbolsScale->setEnabled(checked);
 }

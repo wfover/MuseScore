@@ -47,10 +47,7 @@ public:
     // it should be cleared to 0 at some point, so that it will not be carried over
     // if the melisma is not extended beyond a single chord, but no suitable place to do this
     // has been identified yet.
-    static constexpr Fraction TEMP_MELISMA_TICKS = Fraction::fromTicks(1);
-
-    // WORD_MIN_DISTANCE has never been implemented
-    // static constexpr double  LYRICS_WORD_MIN_DISTANCE = 0.33;     // min. distance between lyrics from different words
+    static constexpr Fraction TEMP_MELISMA_TICKS = Fraction::fromTicks(1); // THIS WAS A HORRIBLE HACK. At some point we must remove it and replace it with a proper solution. (M.S.)
 
     ~Lyrics();
 
@@ -61,8 +58,6 @@ public:
     Segment* segment() const { return toSegment(explicitParent()->explicitParent()); }
     Measure* measure() const { return toMeasure(explicitParent()->explicitParent()->explicitParent()); }
     ChordRest* chordRest() const { return toChordRest(explicitParent()); }
-
-    void layout2(int);
 
     void scanElements(void* data, void (* func)(void*, EngravingItem*), bool all=true) override;
 
@@ -104,6 +99,9 @@ public:
     bool setProperty(Pid propertyId, const PropertyValue&) override;
     PropertyValue propertyDefault(Pid id) const override;
     void triggerLayout() const override;
+
+    double yRelativeToStaff() const;
+    void setYRelativeToStaff(double y);
 
 protected:
     int m_no = 0;  // row index
@@ -150,8 +148,6 @@ public:
     bool isDash() const { return !isEndMelisma(); }
     bool setProperty(Pid propertyId, const PropertyValue& v) override;
 
-    PointF linePos(Grip grip, System** system) const override;
-
 protected:
     Lyrics* m_nextLyrics = nullptr;
 
@@ -173,19 +169,20 @@ public:
 
     LyricsLineSegment* clone() const override { return new LyricsLineSegment(*this); }
 
-    int numOfDashes() const { return m_numOfDashes; }
-    void setNumOfDashes(int val) { m_numOfDashes = val; }
-
-    double dashLength() const { return m_dashLength; }
-    void setDashLength(double val) { m_dashLength = val; }
-
-    // helper functions
     LyricsLine* lyricsLine() const { return toLyricsLine(spanner()); }
     Lyrics* lyrics() const { return lyricsLine()->lyrics(); }
 
-protected:
-    int m_numOfDashes = 0;
-    double m_dashLength = 0.0;
+    double baseLineShift() const;
+
+    struct LayoutData : public LineSegment::LayoutData {
+    public:
+        const std::vector<LineF>& dashes() const { return m_dashes; }
+        void clearDashes() { m_dashes.clear(); }
+        void addDash(const LineF& dash) { m_dashes.push_back(dash); }
+    private:
+        std::vector<LineF> m_dashes;
+    };
+    DECLARE_LAYOUTDATA_METHODS(LyricsLineSegment)
 };
 } // namespace mu::engraving
 #endif

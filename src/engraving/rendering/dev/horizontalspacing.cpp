@@ -48,7 +48,6 @@ double HorizontalSpacing::minHorizontalDistance(const Shape& f, const Shape& s, 
 {
     double dist = -DBL_MAX;        // min real
     double absoluteMinPadding = 0.1 * spatium * squeezeFactor;
-    double verticalClearance = 0.2 * spatium * squeezeFactor;
     for (const ShapeElement& r2 : s.elements()) {
         if (r2.isNull()) {
             continue;
@@ -63,6 +62,7 @@ double HorizontalSpacing::minHorizontalDistance(const Shape& f, const Shape& s, 
             const EngravingItem* item1 = r1.item();
             double ay1 = r1.top();
             double ay2 = r1.bottom();
+            double verticalClearance = computeVerticalClearance(item1, item2, spatium) * squeezeFactor;
             bool intersection = mu::engraving::intersects(ay1, ay2, by1, by2, verticalClearance);
             double padding = 0;
             KerningType kerningType = KerningType::NON_KERNING;
@@ -77,10 +77,6 @@ double HorizontalSpacing::minHorizontalDistance(const Shape& f, const Shape& s, 
                 || (!item1 && item2 && item2->isLyrics())  // Temporary hack: avoids collision with melisma line
                 || kerningType == KerningType::NON_KERNING) {
                 dist = std::max(dist, r1.right() - r2.left() + padding);
-            }
-            if (kerningType == KerningType::KERNING_UNTIL_ORIGIN) { //prepared for future user option, for now always false
-                double origin = r1.left();
-                dist = std::max(dist, origin - r2.left());
             }
         }
     }
@@ -260,13 +256,13 @@ void HorizontalSpacing::spaceRightAlignedSegments(Measure* m, double segmentShap
     for (Segment* raSegment : rightAlignedSegments) {
         // 1) right-align the segment against the following ones
         double minDistAfter = -DBL_MAX;
-        for (Segment* seg = raSegment->next(); seg; seg = seg->next()) {
+        for (Segment* seg = raSegment->nextActive(); seg; seg = seg->nextActive()) {
             double xDiff = seg->x() - raSegment->x();
             double minDist = minHorizontalCollidingDistance(raSegment, seg, segmentShapeSqueezeFactor);
             minDistAfter = std::max(minDistAfter, minDist - xDiff);
         }
         if (minDistAfter != -DBL_MAX && raSegment->prevActive()) {
-            Segment* prevSegment = raSegment->prev();
+            Segment* prevSegment = raSegment->prevActive();
             prevSegment->setWidth(prevSegment->width() - minDistAfter);
             prevSegment->setWidthOffset(prevSegment->widthOffset() - minDistAfter);
             raSegment->mutldata()->moveX(-minDistAfter);
@@ -283,7 +279,7 @@ void HorizontalSpacing::spaceRightAlignedSegments(Measure* m, double segmentShap
         if (prevSegment) {
             prevSegment->setWidth(prevSegment->width() + minDistBefore);
         }
-        for (Segment* seg = raSegment; seg; seg = seg->next()) {
+        for (Segment* seg = raSegment; seg; seg = seg->nextActive()) {
             seg->mutldata()->moveX(minDistBefore);
         }
         m->setWidth(m->width() + minDistBefore);
@@ -297,7 +293,8 @@ double HorizontalSpacing::computeFirstSegmentXPosition(const Measure* m, const S
     Shape ls(RectF(0.0, 0.0, 0.0, m->spatium() * 4));
 
     // First, try to compute first segment x-position by padding against end barline of previous measure
-    Measure* prevMeas = (m->prev() && m->prev()->isMeasure() && m->prev()->system() == m->system()) ? toMeasure(m->prev()) : nullptr;
+    Measure* prevMeas
+        = (m->prevMM() && m->prevMM()->isMeasure() && m->prevMM()->system() == m->system()) ? toMeasure(m->prevMM()) : nullptr;
     Segment* prevMeasEnd = prevMeas ? prevMeas->lastEnabled() : nullptr;
     bool ignorePrev = !prevMeas || prevMeas->system() != m->system() || !prevMeasEnd
                       || (prevMeasEnd->segmentType() & SegmentType::BarLineType && segment->segmentType() & SegmentType::BarLineType);
@@ -351,8 +348,8 @@ double HorizontalSpacing::computePadding(const EngravingItem* item1, const Engra
 
     if (type1 == ElementType::NOTE && isSpecialNotePaddingType(type2)) {
         computeNotePadding(toNote(item1), item2, padding, scaling);
-    } else if (type1 == ElementType::LYRICS && type2 == ElementType::LYRICS) {
-        computeLyricsPadding(toLyrics(item1), toLyrics(item2), padding);
+    } else if (type1 == ElementType::LYRICS && isSpecialLyricsPaddingType(type2)) {
+        computeLyricsPadding(toLyrics(item1), item2, padding);
     } else {
         padding *= scaling;
     }
@@ -460,17 +457,37 @@ void HorizontalSpacing::computeLedgerRestPadding(const Rest* rest2, double& padd
     }
 }
 
-void HorizontalSpacing::computeLyricsPadding(const Lyrics* lyrics1, const Lyrics* lyrics2, double& padding)
+bool HorizontalSpacing::isSpecialLyricsPaddingType(ElementType type)
 {
-    UNUSED(lyrics2);
+    switch (type) {
+    case ElementType::NOTE:
+    case ElementType::REST:
+    case ElementType::LYRICS:
+        return true;
+    default:
+        return false;
+    }
+}
+
+void HorizontalSpacing::computeLyricsPadding(const Lyrics* lyrics1, const EngravingItem* item2, double& padding)
+{
     const MStyle& style = lyrics1->style();
 
-    LyricsSyllabic syllabicType = lyrics1->syllabic();
-    bool leaveSpaceForDash = (syllabicType == LyricsSyllabic::BEGIN || syllabicType == LyricsSyllabic::MIDDLE)
-                             && style.styleB(Sid::lyricsDashForce);
-    if (leaveSpaceForDash) {
-        double spaceForDash = style.styleMM(Sid::lyricsDashMinLength).val() + 2 * style.styleMM(Sid::lyricsDashPad).val();
-        padding = std::max(padding, spaceForDash);
+    bool leaveSpaceForMelisma = lyrics1->separator() && lyrics1->separator()->isEndMelisma() && style.styleB(Sid::lyricsMelismaForce);
+    if (leaveSpaceForMelisma) {
+        double spaceForMelisma = style.styleMM(Sid::lyricsMelismaMinLength).val() + 2 * style.styleMM(Sid::lyricsMelismaPad).val();
+        padding = std::max(padding, spaceForMelisma);
+        return;
+    }
+
+    if (item2->isLyrics()) {
+        LyricsSyllabic syllabicType = lyrics1->syllabic();
+        bool leaveSpaceForDash = (syllabicType == LyricsSyllabic::BEGIN || syllabicType == LyricsSyllabic::MIDDLE)
+                                 && style.styleB(Sid::lyricsDashForce);
+        if (leaveSpaceForDash) {
+            double spaceForDash = style.styleMM(Sid::lyricsDashMinLength).val() + 2 * style.styleMM(Sid::lyricsDashPad).val();
+            padding = std::max(padding, spaceForDash);
+        }
     }
 }
 
@@ -486,6 +503,17 @@ KerningType HorizontalSpacing::computeKerning(const EngravingItem* item1, const 
     }
 
     return doComputeKerningType(item1, item2);
+}
+
+double HorizontalSpacing::computeVerticalClearance(const EngravingItem* item1, const EngravingItem* item2, double spatium)
+{
+    // To be possibly expanded to more cases
+    UNUSED(item1);
+    if (item2 && item2->isAccidental()) {
+        return 0.1 * spatium;
+    }
+
+    return 0.2 * spatium;
 }
 
 bool HorizontalSpacing::isSameVoiceKerningLimited(const EngravingItem* item)
@@ -563,6 +591,12 @@ KerningType HorizontalSpacing::computeNoteKerningType(const Note* note, const En
     if (c->allowKerningAbove() && c->allowKerningBelow()) {
         return KerningType::KERNING;
     }
+
+    if (c->up() && note->ldata()->pos().x() > 0) {
+        // Offset seconds can always be kerned into
+        return KerningType::KERNING;
+    }
+
     bool kerningAbove = item2->canvasPos().y() < note->canvasPos().y();
     if (kerningAbove && !c->allowKerningAbove()) {
         return KerningType::NON_KERNING;
@@ -608,6 +642,13 @@ KerningType HorizontalSpacing::computeLyricsKerningType(const Lyrics* lyrics1, c
     if (item2->isLyrics()) {
         const Lyrics* lyrics2 = toLyrics(item2);
         if (lyrics1->no() == lyrics2->no()) {
+            return KerningType::NON_KERNING;
+        }
+    }
+
+    if ((item2->isNote() || item2->isRest()) && lyrics1->style().styleB(Sid::lyricsMelismaForce)) {
+        LyricsLine* melismaLine = lyrics1->separator();
+        if (melismaLine && melismaLine->isEndMelisma() && item2->tick() >= melismaLine->tick2()) {
             return KerningType::NON_KERNING;
         }
     }

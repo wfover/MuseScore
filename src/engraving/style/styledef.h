@@ -94,9 +94,9 @@ enum class Sid {
     lyricsPlacement,
     lyricsPosAbove,
     lyricsPosBelow,
-    lyricsMinTopDistance,
-    lyricsMinBottomDistance,
-    lyricsMinDistance,
+    lyricsMinTopDistance, // actual meaning: distance to elements on same staff
+    lyricsMinBottomDistance, // actual meaning: distance to elements on other staff
+    lyricsMinDistance, // actual meaning: min horizontal spacing of lyrics-to-lyrics
     lyricsLineHeight,
     lyricsDashMinLength,
     lyricsDashMaxLength,
@@ -109,6 +109,11 @@ enum class Sid {
     lyricsDashPad,
     lyricsDashLineThickness,
     lyricsDashYposRatio,
+
+    lyricsShowDashIfSyllableOnFirstNote,
+    lyricsMelismaForce,
+    lyricsMelismaMinLength,
+    lyricsDashPosAtStartOfSystem,
 
     lyricsOddFontFace,
     lyricsOddFontSize,
@@ -197,6 +202,7 @@ enum class Sid {
     stemLengthSmall,
     shortStemStartLocation,
     shortestStem,
+    combineVoice,
     beginRepeatLeftMargin,
     minNoteDistance,
     barNoteDistance,
@@ -220,6 +226,10 @@ enum class Sid {
     accidentalNoteDistance,
     bracketedAccidentalPadding,
     alignAccidentalsLeft,
+    accidentalOrderFollowsNoteDisplacement,
+    alignAccidentalOctavesAcrossSubChords,
+    keepAccidentalSecondsTogether,
+    alignOffsetOctaveAccidentals,
     keysigAccidentalDistance,
     keysigNaturalDistance,
     beamWidth,
@@ -478,6 +488,8 @@ enum class Sid {
     alwaysShowBracketsWhenEmptyStavesAreHidden,
     alwaysShowSquareBracketsWhenEmptyStavesAreHidden,
     hideInstrumentNameIfOneInstrument,
+    firstSystemInstNameVisibility,
+    subsSystemInstNameVisibility,
     gateTime,
     tenutoGateTime,
     staccatoGateTime,
@@ -662,10 +674,15 @@ enum class Sid {
     barGraceDistance,
 
     minVerticalDistance,
+    skylineMinHorizontalClearance,
     ornamentStyle,
     spatium,
 
     autoplaceHairpinDynamicsDistance,
+
+    dynamicsHairpinVoiceBasedPlacement,
+    dynamicsHairpinsAutoCenterOnGrandStaff,
+    dynamicsHairpinsAboveForVocalStaves,
 
     dynamicsOverrideFont,
     dynamicsFont,
