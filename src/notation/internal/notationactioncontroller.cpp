@@ -25,6 +25,7 @@
 
 #include "notationtypes.h"
 
+#include "engraving/dom/masterscore.h"
 #include "engraving/dom/note.h"
 #include "engraving/dom/text.h"
 #include "engraving/dom/sig.h"
@@ -2079,7 +2080,7 @@ bool NotationActionController::canRedo() const
 
 bool NotationActionController::isNotationPage() const
 {
-    return uiContextResolver()->matchWithCurrent(context::UiCtxNotationOpened);
+    return uiContextResolver()->matchWithCurrent(context::UiCtxProjectOpened);
 }
 
 bool NotationActionController::isStandardStaff() const

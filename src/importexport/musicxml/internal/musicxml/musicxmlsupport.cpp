@@ -27,198 +27,13 @@
 #include "global/serialization/xmlstreamreader.h"
 
 #include "translation.h"
-#include "engraving/dom/accidental.h"
 #include "engraving/dom/articulation.h"
 #include "engraving/dom/chord.h"
 #include "types/symnames.h"
-
+#include "musicxmltypes.h"
 #include "musicxmlsupport.h"
 
-#include "log.h"
-
-using AccidentalType = mu::engraving::AccidentalType;
-using SymId = mu::engraving::SymId;
-
-static const std::map<muse::String, AccidentalType> smuflAccidentalTypes {
-    { u"accidentalDoubleFlatOneArrowDown",                AccidentalType::DOUBLE_FLAT_ONE_ARROW_DOWN },
-    { u"accidentalFlatOneArrowDown",                      AccidentalType::FLAT_ONE_ARROW_DOWN },
-    { u"accidentalNaturalOneArrowDown",                   AccidentalType::NATURAL_ONE_ARROW_DOWN },
-    { u"accidentalSharpOneArrowDown",                     AccidentalType::SHARP_ONE_ARROW_DOWN },
-    { u"accidentalDoubleSharpOneArrowDown",               AccidentalType::DOUBLE_SHARP_ONE_ARROW_DOWN },
-    { u"accidentalDoubleFlatOneArrowUp",                  AccidentalType::DOUBLE_FLAT_ONE_ARROW_UP },
-    { u"accidentalFlatOneArrowUp",                        AccidentalType::FLAT_ONE_ARROW_UP },
-    { u"accidentalNaturalOneArrowUp",                     AccidentalType::NATURAL_ONE_ARROW_UP },
-    { u"accidentalSharpOneArrowUp",                       AccidentalType::SHARP_ONE_ARROW_UP },
-    { u"accidentalDoubleSharpOneArrowUp",                 AccidentalType::DOUBLE_SHARP_ONE_ARROW_UP },
-    { u"accidentalDoubleFlatTwoArrowsDown",               AccidentalType::DOUBLE_FLAT_TWO_ARROWS_DOWN },
-    { u"accidentalFlatTwoArrowsDown",                     AccidentalType::FLAT_TWO_ARROWS_DOWN },
-    { u"accidentalNaturalTwoArrowsDown",                  AccidentalType::NATURAL_TWO_ARROWS_DOWN },
-    { u"accidentalSharpTwoArrowsDown",                    AccidentalType::SHARP_TWO_ARROWS_DOWN },
-    { u"accidentalDoubleSharpTwoArrowsDown",              AccidentalType::DOUBLE_SHARP_TWO_ARROWS_DOWN },
-    { u"accidentalDoubleFlatTwoArrowsUp",                 AccidentalType::DOUBLE_FLAT_TWO_ARROWS_UP },
-    { u"accidentalFlatTwoArrowsUp",                       AccidentalType::FLAT_TWO_ARROWS_UP },
-    { u"accidentalNaturalTwoArrowsUp",                    AccidentalType::NATURAL_TWO_ARROWS_UP },
-    { u"accidentalSharpTwoArrowsUp",                      AccidentalType::SHARP_TWO_ARROWS_UP },
-    { u"accidentalDoubleSharpTwoArrowsUp",                AccidentalType::DOUBLE_SHARP_TWO_ARROWS_UP },
-    { u"accidentalDoubleFlatThreeArrowsDown",             AccidentalType::DOUBLE_FLAT_THREE_ARROWS_DOWN },
-    { u"accidentalFlatThreeArrowsDown",                   AccidentalType::FLAT_THREE_ARROWS_DOWN },
-    { u"accidentalNaturalThreeArrowsDown",                AccidentalType::NATURAL_THREE_ARROWS_DOWN },
-    { u"accidentalSharpThreeArrowsDown",                  AccidentalType::SHARP_THREE_ARROWS_DOWN },
-    { u"accidentalDoubleSharpThreeArrowsDown",            AccidentalType::DOUBLE_SHARP_THREE_ARROWS_DOWN },
-    { u"accidentalDoubleFlatThreeArrowsUp",               AccidentalType::DOUBLE_FLAT_THREE_ARROWS_UP },
-    { u"accidentalFlatThreeArrowsUp",                     AccidentalType::FLAT_THREE_ARROWS_UP },
-    { u"accidentalNaturalThreeArrowsUp",                  AccidentalType::NATURAL_THREE_ARROWS_UP },
-    { u"accidentalSharpThreeArrowsUp",                    AccidentalType::SHARP_THREE_ARROWS_UP },
-    { u"accidentalDoubleSharpThreeArrowsUp",              AccidentalType::DOUBLE_SHARP_THREE_ARROWS_UP },
-    { u"accidentalLowerOneSeptimalComma",                 AccidentalType::LOWER_ONE_SEPTIMAL_COMMA },
-    { u"accidentalRaiseOneSeptimalComma",                 AccidentalType::RAISE_ONE_SEPTIMAL_COMMA },
-    { u"accidentalLowerTwoSeptimalCommas",                AccidentalType::LOWER_TWO_SEPTIMAL_COMMAS },
-    { u"accidentalRaiseTwoSeptimalCommas",                AccidentalType::RAISE_TWO_SEPTIMAL_COMMAS },
-    { u"accidentalLowerOneUndecimalQuartertone",          AccidentalType::LOWER_ONE_UNDECIMAL_QUARTERTONE },
-    { u"accidentalRaiseOneUndecimalQuartertone",          AccidentalType::RAISE_ONE_UNDECIMAL_QUARTERTONE },
-    { u"accidentalLowerOneTridecimalQuartertone",         AccidentalType::LOWER_ONE_TRIDECIMAL_QUARTERTONE },
-    { u"accidentalRaiseOneTridecimalQuartertone",         AccidentalType::RAISE_ONE_TRIDECIMAL_QUARTERTONE },
-    { u"accidentalDoubleFlatEqualTempered",               AccidentalType::DOUBLE_FLAT_EQUAL_TEMPERED },
-    { u"accidentalFlatEqualTempered",                     AccidentalType::FLAT_EQUAL_TEMPERED },
-    { u"accidentalNaturalEqualTempered",                  AccidentalType::NATURAL_EQUAL_TEMPERED },
-    { u"accidentalSharpEqualTempered",                    AccidentalType::SHARP_EQUAL_TEMPERED },
-    { u"accidentalDoubleSharpEqualTempered",              AccidentalType::DOUBLE_SHARP_EQUAL_TEMPERED },
-    { u"accidentalQuarterFlatEqualTempered",              AccidentalType::QUARTER_FLAT_EQUAL_TEMPERED },
-    { u"accidentalQuarterSharpEqualTempered",             AccidentalType::QUARTER_SHARP_EQUAL_TEMPERED }
-};
-
 namespace mu::engraving {
-NoteList::NoteList()
-{
-    _staffNoteLists.reserve(MAX_STAVES);
-    for (int i = 0; i < MAX_STAVES; ++i) {
-        _staffNoteLists.push_back(StartStopList());
-    }
-}
-
-void NoteList::addNote(const int startTick, const int endTick, const size_t staff)
-{
-    if (staff < _staffNoteLists.size()) {
-        _staffNoteLists[staff].push_back(StartStop(startTick, endTick));
-    }
-}
-
-void NoteList::dump(const int& voice) const
-{
-    // dump contents
-    for (int i = 0; i < MAX_STAVES; ++i) {
-        printf("voice %d staff %d:", voice, i);
-        for (size_t j = 0; j < _staffNoteLists.at(i).size(); ++j) {
-            printf(" %d-%d", _staffNoteLists.at(i).at(j).first, _staffNoteLists.at(i).at(j).second);
-        }
-        printf("\n");
-    }
-    // show overlap
-    printf("overlap voice %d:", voice);
-    for (int i = 0; i < MAX_STAVES - 1; ++i) {
-        for (int j = i + 1; j < MAX_STAVES; ++j) {
-            stavesOverlap(i, j);
-        }
-    }
-    printf("\n");
-}
-
-/**
- Determine if notes n1 and n2 overlap.
- This is NOT the case if
- - n1 starts when or after n2 stops
- - or n2 starts when or after n1 stops
- */
-
-static bool notesOverlap(const StartStop& n1, const StartStop& n2)
-{
-    return !(n1.first >= n2.second || n1.second <= n2.first);
-}
-
-/**
- Determine if any note in staff1 and staff2 overlaps.
- */
-
-bool NoteList::stavesOverlap(const int staff1, const int staff2) const
-{
-    for (size_t i = 0; i < _staffNoteLists.at(staff1).size(); ++i) {
-        for (size_t j = 0; j < _staffNoteLists.at(staff2).size(); ++j) {
-            if (notesOverlap(_staffNoteLists.at(staff1).at(i), _staffNoteLists.at(staff2).at(j))) {
-                //printf(" %d-%d", staff1, staff2);
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-/**
- Determine if any note in any staff overlaps.
- */
-
-bool NoteList::anyStaffOverlaps() const
-{
-    for (int i = 0; i < MAX_STAVES - 1; ++i) {
-        for (int j = i + 1; j < MAX_STAVES; ++j) {
-            if (stavesOverlap(i, j)) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-VoiceOverlapDetector::VoiceOverlapDetector()
-{
-    // LOGD("VoiceOverlapDetector::VoiceOverlapDetector(staves %d)", MAX_STAVES);
-}
-
-void VoiceOverlapDetector::addNote(const int startTick, const int endTick, const int& voice, const int staff)
-{
-    // if necessary, create the note list for voice
-    if (!muse::contains(_noteLists, voice)) {
-        _noteLists.insert({ voice, NoteList() });
-    }
-    _noteLists[voice].addNote(startTick, endTick, staff);
-}
-
-void VoiceOverlapDetector::dump() const
-{
-    // LOGD("VoiceOverlapDetector::dump()");
-    for (auto p : _noteLists) {
-        p.second.dump(p.first);
-    }
-}
-
-void VoiceOverlapDetector::newMeasure()
-{
-    // LOGD("VoiceOverlapDetector::newMeasure()");
-    _noteLists.clear();
-}
-
-bool VoiceOverlapDetector::stavesOverlap(const int& voice) const
-{
-    if (muse::contains(_noteLists, voice)) {
-        return _noteLists.at(voice).anyStaffOverlaps();
-    } else {
-        return false;
-    }
-}
-
-String MusicXMLInstrument::toString() const
-{
-    return String(u"chan %1 prog %2 vol %3 pan %4 unpitched %5 name '%6' sound '%7' head %8 line %9 stemDir %10")
-           .arg(midiChannel)
-           .arg(midiProgram)
-           .arg(midiVolume)
-           .arg(midiPan)
-           .arg(unpitched)
-           .arg(name, sound)
-           .arg(int(notehead))
-           .arg(line)
-           .arg(int(stemDirection));
-}
-
 //---------------------------------------------------------
 //   errorStringWithLocation
 //---------------------------------------------------------
@@ -258,7 +73,7 @@ muse::String checkAtEndElement(const muse::XmlStreamReader& e, const muse::Strin
  Note that non-integer values cannot be handled by mscore.
  */
 
-int MxmlSupport::stringToInt(const String& s, bool* ok)
+int MusicXmlSupport::stringToInt(const String& s, bool* ok)
 {
     int res = 0;
     String str = s;
@@ -277,7 +92,7 @@ int MxmlSupport::stringToInt(const String& s, bool* ok)
  Convert MusicXML note type to fraction.
  */
 
-Fraction MxmlSupport::noteTypeToFraction(const String& type)
+Fraction MusicXmlSupport::noteTypeToFraction(const String& type)
 {
     if (type == u"1024th") {
         return Fraction(1, 1024);
@@ -320,10 +135,10 @@ Fraction MxmlSupport::noteTypeToFraction(const String& type)
  Convert note type, number of dots and actual and normal notes into a duration
  */
 
-Fraction MxmlSupport::calculateFraction(const String& type, int dots, int normalNotes, int actualNotes)
+Fraction MusicXmlSupport::calculateFraction(const String& type, int dots, int normalNotes, int actualNotes)
 {
     // type
-    Fraction f = MxmlSupport::noteTypeToFraction(type);
+    Fraction f = MusicXmlSupport::noteTypeToFraction(type);
     if (f.isValid()) {
         // dot(s)
         Fraction f_no_dots = f;
@@ -342,10 +157,10 @@ Fraction MxmlSupport::calculateFraction(const String& type, int dots, int normal
 }
 
 //---------------------------------------------------------
-//   accSymId2MxmlString
+//   accSymId2MusicXmlString
 //---------------------------------------------------------
 
-String accSymId2MxmlString(const SymId id)
+String accSymId2MusicXmlString(const SymId id)
 {
     String s;
     switch (id) {
@@ -437,26 +252,26 @@ String accSymId2MxmlString(const SymId id)
         break;
     default:
         s = u"other";
-        LOGD("accSymId2MxmlString: unknown accidental %d", static_cast<int>(id));
+        LOGD("accSymId2MusicXmlString: unknown accidental %d", static_cast<int>(id));
     }
     return s;
 }
 
 //---------------------------------------------------------
-//   accSymId2SmuflMxmlString
+//   accSymId2SmuflMusicXmlString
 //---------------------------------------------------------
 
-String accSymId2SmuflMxmlString(const SymId id)
+String accSymId2SmuflMusicXmlString(const SymId id)
 {
     return String::fromAscii(SymNames::nameForSymId(id).ascii());
 }
 
 //---------------------------------------------------------
-//   mxmlString2accSymId
+//   musicXmlString2accSymId
 // see https://github.com/w3c/musicxml/blob/6e3a667b85855b04d7e4548ea508b537bc29fc52/schema/musicxml.xsd#L1392-L1439
 //---------------------------------------------------------
 
-SymId mxmlString2accSymId(const String mxmlName, const String smufl)
+SymId musicXmlString2accSymId(const String mxmlName, const String smufl)
 {
     // map MusicXML accidental name to MuseScore enum SymId
     static const std::map<String, SymId> map {
@@ -516,7 +331,7 @@ SymId mxmlString2accSymId(const String mxmlName, const String smufl)
     } else if (mxmlName == u"other") {
         return SymNames::symIdByName(smufl);
     } else {
-        LOGD("mxmlString2accSymId: unknown accidental '%s'", muPrintable(mxmlName));
+        LOGD("musicXmlString2accSymId: unknown accidental '%s'", muPrintable(mxmlName));
     }
 
     // default
@@ -524,10 +339,10 @@ SymId mxmlString2accSymId(const String mxmlName, const String smufl)
 }
 
 //---------------------------------------------------------
-//   accidentalType2MxmlString
+//   accidentalType2MusicXmlString
 //---------------------------------------------------------
 
-String accidentalType2MxmlString(const AccidentalType type)
+String accidentalType2MusicXmlString(const AccidentalType type)
 {
     String s;
     switch (type) {
@@ -623,17 +438,65 @@ String accidentalType2MxmlString(const AccidentalType type)
     return s;
 }
 
+static const std::map<muse::String, AccidentalType> smuflAccidentalTypes {
+    { u"accidentalDoubleFlatOneArrowDown",                AccidentalType::DOUBLE_FLAT_ONE_ARROW_DOWN },
+    { u"accidentalFlatOneArrowDown",                      AccidentalType::FLAT_ONE_ARROW_DOWN },
+    { u"accidentalNaturalOneArrowDown",                   AccidentalType::NATURAL_ONE_ARROW_DOWN },
+    { u"accidentalSharpOneArrowDown",                     AccidentalType::SHARP_ONE_ARROW_DOWN },
+    { u"accidentalDoubleSharpOneArrowDown",               AccidentalType::DOUBLE_SHARP_ONE_ARROW_DOWN },
+    { u"accidentalDoubleFlatOneArrowUp",                  AccidentalType::DOUBLE_FLAT_ONE_ARROW_UP },
+    { u"accidentalFlatOneArrowUp",                        AccidentalType::FLAT_ONE_ARROW_UP },
+    { u"accidentalNaturalOneArrowUp",                     AccidentalType::NATURAL_ONE_ARROW_UP },
+    { u"accidentalSharpOneArrowUp",                       AccidentalType::SHARP_ONE_ARROW_UP },
+    { u"accidentalDoubleSharpOneArrowUp",                 AccidentalType::DOUBLE_SHARP_ONE_ARROW_UP },
+    { u"accidentalDoubleFlatTwoArrowsDown",               AccidentalType::DOUBLE_FLAT_TWO_ARROWS_DOWN },
+    { u"accidentalFlatTwoArrowsDown",                     AccidentalType::FLAT_TWO_ARROWS_DOWN },
+    { u"accidentalNaturalTwoArrowsDown",                  AccidentalType::NATURAL_TWO_ARROWS_DOWN },
+    { u"accidentalSharpTwoArrowsDown",                    AccidentalType::SHARP_TWO_ARROWS_DOWN },
+    { u"accidentalDoubleSharpTwoArrowsDown",              AccidentalType::DOUBLE_SHARP_TWO_ARROWS_DOWN },
+    { u"accidentalDoubleFlatTwoArrowsUp",                 AccidentalType::DOUBLE_FLAT_TWO_ARROWS_UP },
+    { u"accidentalFlatTwoArrowsUp",                       AccidentalType::FLAT_TWO_ARROWS_UP },
+    { u"accidentalNaturalTwoArrowsUp",                    AccidentalType::NATURAL_TWO_ARROWS_UP },
+    { u"accidentalSharpTwoArrowsUp",                      AccidentalType::SHARP_TWO_ARROWS_UP },
+    { u"accidentalDoubleSharpTwoArrowsUp",                AccidentalType::DOUBLE_SHARP_TWO_ARROWS_UP },
+    { u"accidentalDoubleFlatThreeArrowsDown",             AccidentalType::DOUBLE_FLAT_THREE_ARROWS_DOWN },
+    { u"accidentalFlatThreeArrowsDown",                   AccidentalType::FLAT_THREE_ARROWS_DOWN },
+    { u"accidentalNaturalThreeArrowsDown",                AccidentalType::NATURAL_THREE_ARROWS_DOWN },
+    { u"accidentalSharpThreeArrowsDown",                  AccidentalType::SHARP_THREE_ARROWS_DOWN },
+    { u"accidentalDoubleSharpThreeArrowsDown",            AccidentalType::DOUBLE_SHARP_THREE_ARROWS_DOWN },
+    { u"accidentalDoubleFlatThreeArrowsUp",               AccidentalType::DOUBLE_FLAT_THREE_ARROWS_UP },
+    { u"accidentalFlatThreeArrowsUp",                     AccidentalType::FLAT_THREE_ARROWS_UP },
+    { u"accidentalNaturalThreeArrowsUp",                  AccidentalType::NATURAL_THREE_ARROWS_UP },
+    { u"accidentalSharpThreeArrowsUp",                    AccidentalType::SHARP_THREE_ARROWS_UP },
+    { u"accidentalDoubleSharpThreeArrowsUp",              AccidentalType::DOUBLE_SHARP_THREE_ARROWS_UP },
+    { u"accidentalLowerOneSeptimalComma",                 AccidentalType::LOWER_ONE_SEPTIMAL_COMMA },
+    { u"accidentalRaiseOneSeptimalComma",                 AccidentalType::RAISE_ONE_SEPTIMAL_COMMA },
+    { u"accidentalLowerTwoSeptimalCommas",                AccidentalType::LOWER_TWO_SEPTIMAL_COMMAS },
+    { u"accidentalRaiseTwoSeptimalCommas",                AccidentalType::RAISE_TWO_SEPTIMAL_COMMAS },
+    { u"accidentalLowerOneUndecimalQuartertone",          AccidentalType::LOWER_ONE_UNDECIMAL_QUARTERTONE },
+    { u"accidentalRaiseOneUndecimalQuartertone",          AccidentalType::RAISE_ONE_UNDECIMAL_QUARTERTONE },
+    { u"accidentalLowerOneTridecimalQuartertone",         AccidentalType::LOWER_ONE_TRIDECIMAL_QUARTERTONE },
+    { u"accidentalRaiseOneTridecimalQuartertone",         AccidentalType::RAISE_ONE_TRIDECIMAL_QUARTERTONE },
+    { u"accidentalDoubleFlatEqualTempered",               AccidentalType::DOUBLE_FLAT_EQUAL_TEMPERED },
+    { u"accidentalFlatEqualTempered",                     AccidentalType::FLAT_EQUAL_TEMPERED },
+    { u"accidentalNaturalEqualTempered",                  AccidentalType::NATURAL_EQUAL_TEMPERED },
+    { u"accidentalSharpEqualTempered",                    AccidentalType::SHARP_EQUAL_TEMPERED },
+    { u"accidentalDoubleSharpEqualTempered",              AccidentalType::DOUBLE_SHARP_EQUAL_TEMPERED },
+    { u"accidentalQuarterFlatEqualTempered",              AccidentalType::QUARTER_FLAT_EQUAL_TEMPERED },
+    { u"accidentalQuarterSharpEqualTempered",             AccidentalType::QUARTER_SHARP_EQUAL_TEMPERED }
+};
+
 //---------------------------------------------------------
-//   accidentalType2SmuflMxmlString
+//   accidentalType2SmuflMusicXmlString
 //---------------------------------------------------------
 
-String accidentalType2SmuflMxmlString(const AccidentalType type)
+String accidentalType2SmuflMusicXmlString(const AccidentalType type)
 {
     return muse::key(smuflAccidentalTypes, type);
 }
 
 //---------------------------------------------------------
-//   mxmlString2accidentalType
+//   musicXmlString2accidentalType
 //---------------------------------------------------------
 
 /**
@@ -641,7 +504,7 @@ String accidentalType2SmuflMxmlString(const AccidentalType type)
  see https://github.com/w3c/musicxml/blob/6e3a667b85855b04d7e4548ea508b537bc29fc52/schema/musicxml.xsd#L1392-L1439
  */
 
-AccidentalType mxmlString2accidentalType(const String mxmlName, const String smufl)
+AccidentalType musicXmlString2accidentalType(const String mxmlName, const String smufl)
 {
     // map MusicXML accidental name to MuseScore enum AccidentalType
     static const std::map<String, AccidentalType> map {
@@ -701,20 +564,20 @@ AccidentalType mxmlString2accidentalType(const String mxmlName, const String smu
     } else if (mxmlName == "other" && muse::contains(smuflAccidentalTypes, smufl)) {
         return smuflAccidentalTypes.at(smufl);
     } else {
-        LOGD("mxmlString2accidentalType: unknown accidental '%s'", muPrintable(mxmlName));
+        LOGD("musicXmlString2accidentalType: unknown accidental '%s'", muPrintable(mxmlName));
     }
     return AccidentalType::NONE;
 }
 
 //---------------------------------------------------------
-//   mxmlAccidentalTextToChar
+//   musicXmlAccidentalTextToChar
 //---------------------------------------------------------
 
 /**
  Convert a MusicXML accidental text to a accidental character.
  */
 
-String mxmlAccidentalTextToChar(const String mxmlName)
+String musicXmlAccidentalTextToChar(const String mxmlName)
 {
     // map MusicXML accidental name to MuseScore enum AccidentalType
     static const std::map<String, String> map {
@@ -727,7 +590,7 @@ String mxmlAccidentalTextToChar(const String mxmlName)
     if (it != map.end()) {
         return it->second;
     } else {
-        LOGD("mxmlAccidentalTextToChar: unsupported accidental '%s'", muPrintable(mxmlName));
+        LOGD("musicXmlAccidentalTextToChar: unsupported accidental '%s'", muPrintable(mxmlName));
     }
     return u"";
 }

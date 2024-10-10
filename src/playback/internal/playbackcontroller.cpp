@@ -52,6 +52,8 @@ static const ActionCode LOOP_IN_CODE("loop-in");
 static const ActionCode LOOP_OUT_CODE("loop-out");
 static const ActionCode METRONOME_CODE("metronome");
 static const ActionCode MIDI_ON_CODE("midi-on");
+static const ActionCode INPUT_WRITTEN_PITCH("midi-input-written-pitch");
+static const ActionCode INPUT_SOUNDING_PITCH("midi-input-sounding-pitch");
 static const ActionCode COUNT_IN_CODE("countin");
 static const ActionCode PAN_CODE("pan");
 static const ActionCode REPEAT_CODE("repeat");
@@ -107,6 +109,8 @@ void PlaybackController::init()
     dispatcher()->reg(this, PAN_CODE, this, &PlaybackController::toggleAutomaticallyPan);
     dispatcher()->reg(this, METRONOME_CODE, this, &PlaybackController::toggleMetronome);
     dispatcher()->reg(this, MIDI_ON_CODE, this, &PlaybackController::toggleMidiInput);
+    dispatcher()->reg(this, INPUT_WRITTEN_PITCH, [this]() { PlaybackController::setMidiUseWrittenPitch(true); });
+    dispatcher()->reg(this, INPUT_SOUNDING_PITCH, [this]() { PlaybackController::setMidiUseWrittenPitch(false); });
     dispatcher()->reg(this, COUNT_IN_CODE, this, &PlaybackController::toggleCountIn);
     dispatcher()->reg(this, PLAYBACK_SETUP, this, &PlaybackController::openPlaybackSetupDialog);
 
@@ -728,6 +732,13 @@ void PlaybackController::toggleMidiInput()
     notifyActionCheckedChanged(MIDI_ON_CODE);
 }
 
+void PlaybackController::setMidiUseWrittenPitch(bool useWrittenPitch)
+{
+    notationConfiguration()->setMidiUseWrittenPitch(useWrittenPitch);
+    notifyActionCheckedChanged(INPUT_WRITTEN_PITCH);
+    notifyActionCheckedChanged(INPUT_SOUNDING_PITCH);
+}
+
 void PlaybackController::toggleCountIn()
 {
     bool countInEnabled = notationConfiguration()->isCountInEnabled();
@@ -1279,7 +1290,7 @@ void PlaybackController::setupSequencePlayer()
         updateCurrentTempo();
 
         secs_t endSecs = playbackEndSecs();
-        if (pos == endSecs) {
+        if (pos + milisecsToSecs(1) >= endSecs) {
             stop();
         }
     });
@@ -1334,6 +1345,9 @@ void PlaybackController::updateSoloMuteStates()
     bool hasSolo = false;
 
     for (const InstrumentTrackId& instrumentTrackId : existingTrackIdSet) {
+        if (instrumentTrackId == notationPlayback()->metronomeTrackId()) {
+            continue;
+        }
         if (m_notation->soloMuteState()->trackSoloMuteState(instrumentTrackId).solo) {
             hasSolo = true;
             break;
@@ -1398,6 +1412,8 @@ bool PlaybackController::actionChecked(const ActionCode& actionCode) const
     QMap<std::string, bool> isChecked {
         { LOOP_CODE, isLoopEnabled() },
         { MIDI_ON_CODE, notationConfiguration()->isMidiInputEnabled() },
+        { INPUT_WRITTEN_PITCH, notationConfiguration()->midiUseWrittenPitch().val },
+        { INPUT_SOUNDING_PITCH, !notationConfiguration()->midiUseWrittenPitch().val },
         { REPEAT_CODE, notationConfiguration()->isPlayRepeatsEnabled() },
         { PLAY_CHORD_SYMBOLS_CODE, notationConfiguration()->isPlayChordSymbolsEnabled() },
         { PAN_CODE, notationConfiguration()->isAutomaticallyPanEnabled() },

@@ -20,8 +20,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __MUSICXMLFONTHANDLER_H__
-#define __MUSICXMLFONTHANDLER_H__
+#pragma once
 
 #include "engraving/dom/text.h"
 
@@ -31,10 +30,10 @@ class XmlWriter;
 //   MScoreTextToMXML
 //---------------------------------------------------------
 
-class MScoreTextToMXML
+class MScoreTextToMusicXml
 {
 public:
-    MScoreTextToMXML(const String& tag, const String& attr, const CharFormat& defFmt, const String& mtf);
+    MScoreTextToMusicXml(const String& tag, const String& attr, const CharFormat& defFmt, const String& mtf);
     static String toPlainText(const String& text);
     static String toPlainTextPlusSymbols(const std::list<TextFragment>& list);
     static bool split(const std::list<TextFragment>& in, const int pos, const int len, std::list<TextFragment>& left,
@@ -50,5 +49,3 @@ private:
     String musicalTextFont;
 };
 } // namespace Ms
-
-#endif

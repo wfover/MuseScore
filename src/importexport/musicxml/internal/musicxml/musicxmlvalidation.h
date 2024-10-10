@@ -20,20 +20,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef MU_MUSICXML_MUSICXMLVALIDATION_H
-#define MU_MUSICXML_MUSICXMLVALIDATION_H
+#pragma once
 
 #include "global/types/bytearray.h"
 #include "global/types/string.h"
 #include "engraving/engravingerrors.h"
 
 namespace mu::iex::musicxml {
-class MusicxmlValidation
+class MusicXmlValidation
 {
 public:
 
     static engraving::Err validate(const muse::String& name, const muse::ByteArray& data);
 };
 }
-
-#endif // MU_MUSICXML_MUSICXMLVALIDATION_H

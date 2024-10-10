@@ -436,12 +436,7 @@ void Score::setUpTempoMap()
         if (m->mmRest()) {
             m->mmRest()->moveTicks(diff);
         }
-        // TODO: Better to use Measure::isAnacrusis() here
-        // but since it requires irregular() return true it's not working as expected
-        // if user didn't checked "Exclude from measure count" in measure properties,
-        // but reduces the real measure length.
-        // So we use the following workaround:
-        if (m->ticks() < m->timesig()) {
+        if (m->isAnacrusis()) {
             anacrusisMeasures.push_back(m);
         }
 
@@ -584,20 +579,26 @@ void Score::rebuildTempoAndTimeSigMaps(Measure* measure, std::optional<BeatsPerS
                     }
                 }
             }
-            if (!RealIsNull(stretch) && !RealIsNull(stretch)) {
+
+            if (!RealIsNull(stretch) && !RealIsEqual(stretch, 1.0)) {
                 BeatsPerSecond otempo = tempomap()->tempo(segment.tick().ticks());
                 BeatsPerSecond ntempo = otempo.val / stretch;
                 tempomap()->setTempo(segment.tick().ticks(), ntempo);
 
-                Fraction currentSegmentEndTick;
+                Fraction tempoEndTick;
 
-                if (segment.next1()) {
-                    currentSegmentEndTick = segment.next1()->tick();
-                } else {
-                    currentSegmentEndTick = segment.tick() + segment.ticks();
+                const Segment* nextActiveSegment = segment.next1();
+                while (nextActiveSegment && !nextActiveSegment->isActive()) {
+                    nextActiveSegment = nextActiveSegment->next1();
                 }
 
-                Fraction etick = currentSegmentEndTick - Fraction(1, 480 * 4);
+                if (nextActiveSegment) {
+                    tempoEndTick = nextActiveSegment->tick();
+                } else {
+                    tempoEndTick = segment.tick() + segment.ticks();
+                }
+
+                Fraction etick = tempoEndTick - Fraction(1, 480 * 4);
                 auto e = tempomap()->find(etick.ticks());
                 if (e == tempomap()->end()) {
                     tempomap()->setTempo(etick.ticks(), otempo);
@@ -3424,7 +3425,7 @@ static void onFocusedItemChanged(EngravingItem* item)
 
 void Score::deselect(EngravingItem* el)
 {
-    addRefresh(el->abbox());
+    addRefresh(el->pageBoundingRect());
     m_selection.remove(el);
     setSelectionChanged(true);
     m_selection.update();
@@ -3491,7 +3492,7 @@ void Score::selectSingle(EngravingItem* e, staff_idx_t staffIdx)
             doSelect(e, SelectType::RANGE, staffIdx);
             return;
         }
-        addRefresh(e->abbox());
+        addRefresh(e->pageBoundingRect());
         m_selection.add(e);
         m_is.setTrack(e->track());
         selState = SelState::LIST;
@@ -3547,7 +3548,7 @@ void Score::selectAdd(EngravingItem* e)
             m_selection.updateSelectedElements();
         }
     } else if (!muse::contains(m_selection.elements(), e)) {
-        addRefresh(e->abbox());
+        addRefresh(e->pageBoundingRect());
         selState = SelState::LIST;
         m_selection.add(e);
     }
@@ -4087,7 +4088,7 @@ void Score::lassoSelect(const RectF& bbox)
         std::vector<EngravingItem*> itemsToSelect;
 
         for (EngravingItem* item : items) {
-            if (frr.contains(item->abbox())) {
+            if (frr.contains(item->pageBoundingRect())) {
                 if (item->type() != ElementType::MEASURE && item->selectable()) {
                     itemsToSelect.push_back(item);
                 }
